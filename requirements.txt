@@ -4,6 +4,3 @@ scikit-learn
 nltk
 streamlit
 matplotlib
-tensorflow
-transformers
-torch
