@@ -1,13 +1,6 @@
 import streamlit as st
 import pandas as pd
 import pickle
-import os
-import torch
-
-from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification
-)
 
 from ai_agent import SMSAIAgent
 
@@ -28,6 +21,7 @@ st.set_page_config(
 # =====================================================
 
 st.title("🛡️ AI Agent for SMS Spam Detection")
+
 st.write(
     "Intelligent SMS classification using Machine Learning, "
     "BiLSTM, DistilBERT, BERT and AI-based filtering."
@@ -44,135 +38,22 @@ agent = SMSAIAgent()
 
 
 # =====================================================
-# LOAD DISTILBERT
+# LOAD MACHINE LEARNING MODEL
 # =====================================================
 
 @st.cache_resource
-def load_distilbert():
+def load_ml_model():
 
-    model_path = "distilbert_model"
+    with open("spam_model.pkl", "rb") as f:
+        model = pickle.load(f)
 
-    if not os.path.exists(model_path):
-        return None, None
+    with open("vectorizer.pkl", "rb") as f:
+        vectorizer = pickle.load(f)
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_path
-    )
-
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_path
-    )
-
-    model.eval()
-
-    return tokenizer, model
+    return model, vectorizer
 
 
-distilbert_tokenizer, distilbert_model = load_distilbert()
-
-
-# =====================================================
-# DISTILBERT PREDICTION
-# =====================================================
-
-def predict_distilbert(message):
-
-    inputs = distilbert_tokenizer(
-        message,
-        return_tensors="pt",
-        truncation=True,
-        padding=True,
-        max_length=128
-    )
-
-    with torch.no_grad():
-
-        outputs = distilbert_model(
-            **inputs
-        )
-
-    probabilities = torch.softmax(
-        outputs.logits,
-        dim=1
-    )
-
-    prediction = torch.argmax(
-        probabilities,
-        dim=1
-    ).item()
-
-    confidence = probabilities[
-        0,
-        prediction
-    ].item()
-
-    return prediction, confidence
-
-
-# =====================================================
-# LOAD BERT
-# =====================================================
-
-@st.cache_resource
-def load_bert():
-
-    model_path = "bert_model"
-
-    if not os.path.exists(model_path):
-        return None, None
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_path
-    )
-
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_path
-    )
-
-    model.eval()
-
-    return tokenizer, model
-
-
-bert_tokenizer, bert_model = load_bert()
-
-
-# =====================================================
-# BERT PREDICTION
-# =====================================================
-
-def predict_bert(message):
-
-    inputs = bert_tokenizer(
-        message,
-        return_tensors="pt",
-        truncation=True,
-        padding=True,
-        max_length=128
-    )
-
-    with torch.no_grad():
-
-        outputs = bert_model(
-            **inputs
-        )
-
-    probabilities = torch.softmax(
-        outputs.logits,
-        dim=1
-    )
-
-    prediction = torch.argmax(
-        probabilities,
-        dim=1
-    ).item()
-
-    confidence = probabilities[
-        0,
-        prediction
-    ].item()
-
-    return prediction, confidence
+ml_model, vectorizer = load_ml_model()
 
 
 # =====================================================
@@ -181,18 +62,12 @@ def predict_bert(message):
 
 st.sidebar.header("⚙️ Settings")
 
-model_choice = st.sidebar.selectbox(
-    "Select AI Model",
-    [
-        "DistilBERT",
-        "BERT"
-    ]
+st.sidebar.info(
+    "Cloud deployment uses the trained Machine Learning "
+    "model for reliable SMS prediction."
 )
 
-st.sidebar.info(
-    "DistilBERT achieved the best overall "
-    "F1-score in our evaluation."
-)
+model_choice = "Machine Learning"
 
 
 # =====================================================
@@ -230,40 +105,31 @@ if st.button(
         ):
 
             # -----------------------------------------
-            # MODEL PREDICTION
+            # MACHINE LEARNING PREDICTION
             # -----------------------------------------
 
-            if model_choice == "DistilBERT":
+            message_vector = vectorizer.transform(
+                [message]
+            )
 
-                if distilbert_model is None:
+            prediction = ml_model.predict(
+                message_vector
+            )[0]
 
-                    st.error(
-                        "DistilBERT model not found."
-                    )
+            # Confidence
+            if hasattr(ml_model, "predict_proba"):
 
-                    st.stop()
+                probabilities = ml_model.predict_proba(
+                    message_vector
+                )[0]
 
-                prediction, confidence = (
-                    predict_distilbert(
-                        message
-                    )
+                confidence = (
+                    max(probabilities) * 100
                 )
 
             else:
 
-                if bert_model is None:
-
-                    st.error(
-                        "BERT model not found."
-                    )
-
-                    st.stop()
-
-                prediction, confidence = (
-                    predict_bert(
-                        message
-                    )
-                )
+                confidence = 100.0
 
 
             # -----------------------------------------
